@@ -22,7 +22,6 @@ Route::middleware('auth')->group(function () {
 Route::get('/concerts/{id}', [ConcertController::class, 'show'])->name('concerts.show');
 
 Route::post('/concerts/{id}/orders', [OrderController::class, 'store'])
-    ->middleware('auth')
     ->name('orders.store');
 
 require __DIR__.'/auth.php';

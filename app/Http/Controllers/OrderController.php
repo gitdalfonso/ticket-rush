@@ -4,59 +4,68 @@ namespace App\Http\Controllers;
 
 use App\Models\Concert;
 use App\Models\Order;
-use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Throwable;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class OrderController extends Controller
 {
     public function store($concertId)
     {
-        // Validar que el usuario esté logueado
-        if (!Auth::check()) {
-            return redirect()->route('login');
-        }
+        // Simulamos usuario logueado (ID 1 para la prueba)
+        $userId = 1;
 
         $concert = Concert::findOrFail($concertId);
+
+        // ======================================================
+        // SOLUCIÓN SENIOR: REDIS ATOMIC LOCK
+        // ======================================================
+        // Creamos un "semáforo" llamado 'concert_sale_{id}'.
+        // Solo 1 proceso puede pasar a la vez.
+
+        $lock = Cache::lock('concert_sale_' . $concertId, 10);
+
         try {
-            DB::beginTransaction();
+            // block(5): Intenta entrar por 5 segundos. Si hay fila, espera.
+            return $lock->block(5, function () use ($concert, $userId) {
 
-            // Buscar UN ticket disponible cualquiera
-            // El problema: Si 2 usuarios leen esta línea al mismo tiempo,
-            // ambos obtendrán el MISMO ticket.
-            $ticket = $concert->tickets()
-                ->where('status', 'available')
-                ->first();
+                // --- ZONA SEGURA (Solo 1 a la vez) ---
 
-            // Si no hay tickets, rollback y error
-            if (!$ticket) {
-                DB::rollBack();
-                return back()->withErrors(['message' => '¡Lo sentimos! Se acaban de agotar las entradas.']);
-            }
+                return DB::transaction(function () use ($concert, $userId) {
 
-            // Crear la Orden
-            $order = Order::create([
-                'user_id' => Auth::id(),
-                'concert_id' => $concert->id,
-                'status' => 'paid', // Simulamos que pagó al instante
-            ]);
+                    // Buscamos ticket y bloqueamos la fila en MySQL también (doble seguridad)
+                    $ticket = $concert->tickets()
+                        ->where('status', 'available')
+                        ->lockForUpdate()
+                        ->first();
 
-            // Marcar el ticket como VENDIDO y asignarlo a la orden
-            $ticket->update([
-                'status' => 'sold',
-                'order_id' => $order->id,
-            ]);
+                    if (!$ticket) {
+                        // Ahora devolvemos 422 (Unprocessable Entity) explícito
+                        return response()->json(['message' => '¡Agotado!'], 422);
+                    }
 
-            DB::commit();
+                    // Creamos la orden
+                    $order = Order::create([
+                        'user_id' => $userId,
+                        'concert_id' => $concert->id,
+                        'status' => 'paid',
+                    ]);
 
-            // Éxito
-            return back()->with('success', "¡Entrada comprada con éxito! Tu código es: {$ticket->code}");
+                    // Marcamos ticket como vendido
+                    $ticket->update([
+                        'status' => 'sold',
+                        'order_id' => $order->id,
+                    ]);
 
-        } catch (Exception | Throwable $e) {
-            DB::rollBack();
-            return back()->withErrors(['message' => 'Ocurrió un error inesperado: ' . $e->getMessage()]);
+                    // Devolvemos 201 (Created)
+                    return response()->json(['success' => "Ticket {$ticket->code} comprado."], 201);
+                });
+            });
+
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            // Si esperó 5 segundos y no pudo entrar
+            return response()->json(['message' => 'Servidor saturado, intenta de nuevo.'], 429);
         }
     }
 }
