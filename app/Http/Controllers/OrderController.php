@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Concert;
 use App\Models\Order;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\TicketPurchased;
 
 class OrderController extends Controller
 {
@@ -21,7 +24,6 @@ class OrderController extends Controller
 
         $concert = Concert::findOrFail($concertId);
 
-        // 2. El mismo Bloqueo Atómico (No tocamos la lógica, es perfecta)
         $lock = Cache::lock('concert_sale_' . $concertId, 10);
 
         try {
@@ -50,13 +52,26 @@ class OrderController extends Controller
                         'order_id' => $order->id,
                     ]);
 
+                    Mail::to(Auth::user())->send(new TicketPurchased($order));
+
                     // CAMBIO: Redirección con mensaje verde de éxito
                     return back()->with('success', "¡Entrada comprada con éxito! Tu código es: {$ticket->code}");
                 });
             });
 
-        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+        } catch (LockTimeoutException $e) {
             return back()->withErrors(['message' => 'El servidor está muy ocupado, intenta de nuevo.']);
         }
+    }
+
+    public function index()
+    {
+        // Traemos las órdenes del usuario con los datos del concierto y el ticket
+        $orders = Order::with(['concert', 'tickets'])
+            ->where('user_id', Auth::id())
+            ->latest()
+            ->get();
+
+        return view('orders.index', compact('orders'));
     }
 }
