@@ -27,8 +27,20 @@
         <p><strong>Precio:</strong> ${{ $order->concert->price }}</p>
     </div>
 
-    <div class="ticket-code">
-        {{ $order->tickets->first()->code }}
+    <div style="text-align: center; margin: 30px 0;">
+        <p style="margin-bottom: 10px; color: #6b7280; font-size: 12px; text-transform: uppercase;">Código de Acceso QR</p>
+        <div style="display: inline-block; padding: 15px; background: #fff; border: 2px dashed #d1d5db; border-radius: 8px;">
+            {!! QrCode::format('svg')
+                ->size(150)
+                ->color(0, 0, 0)          // Color del código: Negro puro
+                ->backgroundColor(255, 255, 255) // Fondo: Blanco puro (esto es clave)
+                ->margin(2)               // Margen blanco alrededor para que el lector respire
+                ->generate($order->tickets->first()->code ?? 'ERROR')
+            !!}
+        </div>
+        <p style="margin-top: 10px; font-family: monospace; font-weight: bold; color: #374151;">
+            {{ $order->tickets->first()->code }}
+        </p>
     </div>
 
     <div style="text-align: center;">
