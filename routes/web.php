@@ -3,15 +3,25 @@
 use App\Http\Controllers\ConcertController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicConcertController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Página de Inicio (Listado de Conciertos)
+Route::get('/', [PublicConcertController::class, 'index'])->name('home');
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Mis Entradas (Protegido)
+Route::get('/my-tickets', [OrderController::class, 'index'])
+    ->middleware('auth')
+    ->name('orders.index');
+
+// Detalle del Concierto (URL Amigable)
+// Nota: Usamos {concert} para que Laravel inyecte el modelo buscando por slug
+Route::get('/concerts/{concert}', [PublicConcertController::class, 'show'])->name('concerts.show');
+
+// Procesar Compra
+Route::post('/concerts/{id}/orders', [OrderController::class, 'store'])
+    ->middleware(['auth', 'throttle:6,1'])
+    ->name('orders.store');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -19,26 +29,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::get('/concerts/{id}', [ConcertController::class, 'show'])->name('concerts.show');
-
-Route::post('/concerts/{id}/orders', [OrderController::class, 'store'])
-    ->middleware(['auth', 'throttle:3,1'])
-    ->name('orders.store');
-
-Route::get('/my-tickets', [App\Http\Controllers\OrderController::class, 'index'])
-    ->middleware('auth')
-    ->name('orders.index');
-
-Route::get('/mail-preview', function () {
-    // Buscamos una orden que tenga al menos un ticket asociado (has('tickets'))
-    // y cargamos la relación de una vez (with('tickets'))
-    $order = App\Models\Order::with('tickets')->has('tickets')->latest()->first();
-
-    if(!$order) {
-        return "No hay ninguna orden válida con tickets. Ve y compra una entrada primero.";
-    }
-
-    return new App\Mail\TicketPurchased($order);
-});
+Route::get('/login', function () {
+    return redirect()->route('filament.admin.auth.login');
+})->name('login');
 
 require __DIR__.'/auth.php';

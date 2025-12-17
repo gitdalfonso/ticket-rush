@@ -89,11 +89,16 @@ class ConcertResource extends Resource
                     ->sortable(),
 
                 // Columna calculada (cuántos quedan)
-                TextColumn::make('tickets_count')
-                    ->counts('tickets') // Cuenta la relación hasMany
+                TextColumn::make('sold_tickets')
                     ->label('Vendidos')
+                    ->getStateUsing(function ($record) {
+                        // Cuenta las filas que NO están disponibles (sold, reserved, etc.)
+                        return $record->tickets()->where('status', '!=', 'available')->count();
+                    })
                     ->badge()
-                    ->color('success'),
+                    ->color(fn (string $state, $record): string =>
+                    $state >= $record->total_tickets ? 'danger' : 'success'
+                    ),
             ])
             ->filters([
                 // Aquí podríamos poner filtros por fecha, precio, etc.
