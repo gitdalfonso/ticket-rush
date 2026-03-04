@@ -1,59 +1,88 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# ⚡ TicketRush
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+TicketRush is a high-performance ticket sales platform built with Laravel. It is specifically designed to handle high-concurrency scenarios (such as ticket sales for highly demanded concerts), guaranteeing minimal response times and completely preventing inventory overselling.
 
-## About Laravel
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 🚀 Key Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### 🛡️ Backend & Architecture (Senior Level)
+* **Atomic Locks:** Integration with **Redis** to lock transactions in milliseconds. If 1,000 users attempt to buy the last ticket simultaneously, the system will only process one order, rejecting the rest without crashing the database.
+* **Asynchronous Processing (Queues):** Email delivery with tickets (including QR generation) is delegated to **Redis Workers** in the background. This allows the user to see the "Successful Purchase" screen instantly.
+* **Real Inventory Management:** Instead of simply subtracting a number from a capacity column, the system generates "Physical Seats" (database rows) and updates their status in real-time.
+* **Smart Admin Panel:** Built with **FilamentPHP**. It includes custom Hooks (`afterSave`) that detect if an administrator increases an event's capacity and automatically generate the missing tickets in the database.
 
-## Learning Laravel
+### 🎨 Frontend & User Experience (UI/UX)
+* **Modern and Responsive Design:** Built entirely with **Tailwind CSS**.
+* **DRY Templates:** Use of anonymous Blade components (`<x-layout>`) for easy and maintainable layout structure (Navbar, Footer).
+* **SEO-Friendly URLs:** Implementation of dynamic Slugs (`/concerts/metallica-tour`) instead of database IDs, improving SEO and URL readability.
+* **Dynamic QR Code Generation:** Tickets generate scannable QRs in SVG format with adjusted backgrounds to ensure perfect contrast and readability under any lighting condition.
+* **Real-Time Availability:** Visual progress bars that calculate and display the remaining inventory by dynamically subtracting sold tickets from the total capacity.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## 🛠️ Tech Stack
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+* **Framework:** Laravel 11
+* **Database:** MySQL / SQLite
+* **Cache & Queues:** Redis
+* **Admin Panel:** FilamentPHP v3
+* **Styling:** Tailwind CSS
+* **Authentication:** Laravel Breeze (Customized to fit the business flow)
+* **QR Generation:** `simplesoftwareio/simple-qrcode`
 
-## Laravel Sponsors
+## 🧠 Purchase Flow (Under the Hood)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+1. The user clicks "Buy Ticket".
+2. Laravel requests an **Atomic Lock from Redis** for that specific concert.
+3. If the lock is acquired, it queries the database for a ticket where `status = 'available'`.
+4. The ticket is assigned to the user, its status changes to `sold`, and an `Order` is created.
+5. The Redis Lock is released.
+6. A Job is dispatched to the **Queue** to generate the QR code and send the confirmation email.
+7. The user is instantly redirected to their dashboard.
 
-### Premium Partners
+## ⚙️ Local Installation
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Follow these steps to set up the project in your local environment. Ensure you have PHP 8.2+, Composer, Node.js, and a running **Redis** server.
 
-## Contributing
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/your-username/ticketrush.git](https://github.com/your-username/ticketrush.git)
+   cd ticketrush
+   
+2. **Install dependencies:**
+   ```bash
+   composer install
+   npm install && npm run build
+   
+3. **Configure environment:**
+    ```bash
+   cp .env.example .env
+   php artisan key:generate
+   
+4. **Set up the database and Redis:**
+   Open your .env file and make sure Redis is set as your default driver for cache and queues:
+    ```bash
+   DB_CONNECTION=sqlite # or mysql
+   CACHE_STORE=redis
+   QUEUE_CONNECTION=redis
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+5. **Run migrations:**
+   ```bash
+   php artisan migrate
+   
+6. **Start the application:**
+   ```bash
+   # Terminal 1: Start the local development server
+   php artisan serve
+   # Terminal 2: Start the queue worker to process emails and background tasks
+   php artisan queue:work
 
-## Code of Conduct
+## AI Usage
+Some structural scaffolding and initial code drafts were AI-assisted. All generated code was manually reviewed, refactored, and adjusted to ensure:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+* Compliance with SOLID principles.
 
-## Security Vulnerabilities
+* Security best practices (e.g., atomic locks to prevent race conditions).
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+* Proper validation and error handling.
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+* A maintainable and scalable architecture.
